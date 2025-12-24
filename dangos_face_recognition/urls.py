@@ -6,6 +6,7 @@ from dangos_face_recognition.views.user_view import create_user, fetch_users, fe
 from dangos_face_recognition.views.authentication_view import login, logout, refresh_token, reset_password, activate_users
 from dangos_face_recognition.views.user_face_view import enroll_face, verify_face, update_face
 from dangos_face_recognition.views.job_view import fetch_jobs
+from dangos_face_recognition.views.active_history_view import create_active_history, fetch_active_histories, fetch_active_history_by_users
 from dangos_face_recognition.views.scrap_view import scrap_job
 
 urlpatterns = [
@@ -27,6 +28,10 @@ urlpatterns = [
     path('api/dangos-face-recognition/v1/user-face/update/<int:id>', update_face),
     # Jobs
     path('api/dangos-face-recognition/v1/job/fetch', fetch_jobs),
+    # Active Histories
+    path('api/dangos-face-recognition/v1/active-history/create', create_active_history),
+    path('api/dangos-face-recognition/v1/active-history/fetch', fetch_active_histories),
+    path('api/dangos-face-recognition/v1/active-history/fetch-by-user', fetch_active_history_by_users),
     # Scrap
     path('api/dangos-face-recognition/v1/scrap/fetch-jobs', scrap_job),
 ]

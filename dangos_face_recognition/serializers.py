@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import UserFace, Job
+from .models import UserFace, Job, ActiveHistory
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
@@ -14,9 +14,14 @@ class UserSerializer(serializers.ModelSerializer):
 class UserFaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserFace
-        fields = ['id', 'custom_user', 'custom_user_id', 'image', 'embedding', 'created_at']
+        fields = ['id', 'custom_user', 'custom_user_id', 'image', 'embedding', 'created_at', 'updated_at']
 
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
-        fields = ['id', 'title', 'created_at']
+        fields = ['id', 'title', 'created_at', 'updated_at']
+
+class ActiveHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActiveHistory
+        fields = ['id', 'custom_user', 'custom_user_id', 'operating_system', 'model', 'created_at', 'updated_at']

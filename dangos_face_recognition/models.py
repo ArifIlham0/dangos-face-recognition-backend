@@ -83,7 +83,7 @@ class UserFace(models.Model):
         return f"Face data for {self.custom_user.username}"
     
 class ActiveHistory(models.Model):
-    custom_user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="active_histories")
+    custom_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="active_histories")
     operating_system = models.CharField(max_length=255, null=True, blank=True)
     model = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -3,7 +3,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import get_user_model
 from rest_framework.response import Response
 from rest_framework import status, viewsets
-from ..serializers import UserSerializer
+from ..serializers import UserSerializer, UserFaceSerializer
 from ..models import UserToken, RefreshToken
 from ..middlewares.permissions import IsSuperUser
 from ..middlewares.authentications import BearerTokenAuthentication
@@ -30,6 +30,20 @@ class UserViewSet(viewsets.ViewSet):
             request_data = request.data.copy()
             request_data['username'] = username
             request_data['password'] = password
+            request_data['first_name'] = username
+
+            User = get_user_model()
+            if User.objects.filter(username=username).exists():
+                return Response({
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "Username already exists"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if User.objects.filter(email=email).exists():
+                return Response({
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "Email already exists"
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             serializer = UserSerializer(data=request_data)
 
@@ -48,7 +62,10 @@ class UserViewSet(viewsets.ViewSet):
                 return Response({
                     "status": status.HTTP_201_CREATED,
                     "message": "Register successful",
-                    "data": data,
+                    "data": {
+                        "is_verified": True,
+                        "user": data,
+                    }
                 }, status=status.HTTP_201_CREATED)
             else:
                 return Response({
@@ -76,11 +93,27 @@ class UserViewSet(viewsets.ViewSet):
                 users = users.filter(email__icontains=query_param) | users.filter(first_name__icontains=query_param)
             
             users = users.order_by('-date_joined')
-            user_serializer = UserSerializer(users, many=True)
-            data = user_serializer.data
             start = (page - 1) * page_size
             end = start + page_size
-            data = data[start:end]
+            users_page = users[start:end]
+
+            data = []
+            for user in users_page:
+                user_serializer = UserSerializer(user, context={'request': request})
+                user_data = user_serializer.data
+
+                if hasattr(user, "user_faces"):
+                    user_face_serializer = UserFaceSerializer(user.user_faces, context={'request': request})
+                    user_face_data = user_face_serializer.data
+                    if "embedding" in user_face_data:
+                        user_face_data.pop("embedding")
+                else:
+                    user_face_data = {}
+
+                data.append({
+                    "user": user_data,
+                    "user_face": user_face_data
+                })
 
             return Response({
                 "status": status.HTTP_200_OK,
@@ -103,12 +136,27 @@ class UserViewSet(viewsets.ViewSet):
             User = get_user_model()
             user = User.objects.get(pk=pk)
             user_serializer = UserSerializer(user, context={'request': request})
-            data = user_serializer.data
+
+            if not hasattr(user, "user_faces"):
+                return Response({
+                    "status": status.HTTP_404_NOT_FOUND,
+                    "message": "User face data not found."
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            user_face_serializer = UserFaceSerializer(user.user_faces, context={'request': request})
+            user_face_data = user_face_serializer.data
+            user_data = user_serializer.data
+
+            if "embedding" in user_face_data:
+                user_face_data.pop("embedding")
 
             return Response({
                 "status": status.HTTP_200_OK,
                 "message": "User fetched successfully.",
-                "data": data,
+                "data": {
+                    "user": user_data,
+                    "user_face": user_face_data,
+                }
             }, status=status.HTTP_200_OK)
 
         except Exception as e:

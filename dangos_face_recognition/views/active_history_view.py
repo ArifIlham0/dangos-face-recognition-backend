@@ -17,7 +17,7 @@ class ActiveHistoryViewSet(viewsets.ViewSet):
             permission_classes = [AllowAny]
         elif self.action in ["list"]:
             permission_classes = [IsSuperUser]
-        elif self.action in ["create", "fetch_active_history_by_users"]:
+        elif self.action in ["create", "retrieve", "fetch_active_history_by_users"]:
             permission_classes = [IsAuthenticated]
 
         return [permission() for permission in permission_classes]
@@ -89,6 +89,31 @@ class ActiveHistoryViewSet(viewsets.ViewSet):
                 "page": page,
                 "page_size": page_size,
                 "total_page": (active_histories.count() + page_size - 1) // page_size,
+                "data": data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def retrieve(self, request, pk=None):
+        try:
+            try:
+                active_history = ActiveHistory.objects.get(pk=pk)
+            except ObjectDoesNotExist:
+                return Response({
+                    "status": status.HTTP_404_NOT_FOUND,
+                    "message": "Active history not found.",
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            active_history_serializer = ActiveHistorySerializer(active_history)
+            data = active_history_serializer.data
+
+            return Response({
+                "status": status.HTTP_200_OK,
+                "message": "Active history fetched successfully.",
                 "data": data
             }, status=status.HTTP_200_OK)
 

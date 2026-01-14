@@ -30,10 +30,11 @@ class ActiveHistoryViewSet(viewsets.ViewSet):
             user_histories = ActiveHistory.objects.filter(custom_user=request.user).order_by('updated_at')
             total_history = user_histories.count()
 
-            if total_history >= 20:
-                delete_count = total_history - 20 + 1
+            if total_history >= 12:
+                delete_count = total_history - 12 + 1
                 histories_to_delete = user_histories[:delete_count]
-                histories_to_delete.delete()
+                pk_list = [h.pk for h in histories_to_delete]
+                ActiveHistory.objects.filter(pk__in=pk_list).delete()
 
             serializer = ActiveHistorySerializer(
                 data={

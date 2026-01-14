@@ -15,6 +15,7 @@ from ..serializers import UserFaceSerializer, UserSerializer
 from ..middlewares.permissions import IsSuperUser
 from ..middlewares.authentications import BearerTokenAuthentication
 from ..models import UserToken, RefreshToken
+from ..utils.image_util import crop_center_square
 
 class UserFaceViewSet(viewsets.ViewSet):
     authentication_classes = [BearerTokenAuthentication]
@@ -34,7 +35,6 @@ class UserFaceViewSet(viewsets.ViewSet):
             User = get_user_model()
             user = User.objects.get(id=request.user.id)
             image_file = request.FILES.get('image')
-            print("Ini image_file:", image_file)
 
             if not image_file:
                 return Response({
@@ -42,10 +42,15 @@ class UserFaceViewSet(viewsets.ViewSet):
                     "message": "Image file is required"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            cropped_content = crop_center_square(image_file)
+            cropped_file = SimpleUploadedFile(
+                name=image_file.name,
+                content=cropped_content,
+                content_type=image_file.content_type
+            )
             temp_path = os.path.join(settings.MEDIA_ROOT, f"{user.id}_enroll.jpg")
             with open(temp_path, "wb+") as f:
-                for chunk in image_file.chunks():
-                    f.write(chunk)
+                f.write(cropped_content)
 
             try:
                 embedding_objs = DeepFace.represent(
@@ -54,15 +59,11 @@ class UserFaceViewSet(viewsets.ViewSet):
                     enforce_detection=True 
                 )
             except Exception:
-                # if os.path.exists(temp_path):
-                #     os.remove(temp_path)
-                debug_dir = os.path.join(settings.MEDIA_ROOT, "debug")
-                os.makedirs(debug_dir, exist_ok=True)
-                debug_path = os.path.join(debug_dir, f"{user.id}_failed.jpg")
-                os.rename(temp_path, debug_path)
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
                 return Response({
                     "status": status.HTTP_400_BAD_REQUEST,
-                    "message": "No face detected in the image"
+                    "message": "No face detected in the camera"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             embedding_obj = DeepFace.represent(
@@ -94,16 +95,15 @@ class UserFaceViewSet(viewsets.ViewSet):
             if hasattr(user, "user_faces"):
                 serializer = UserFaceSerializer(
                     instance=user.user_faces,
-                    data={'embedding': embedding_vector, 'image': image_file},
+                    data={'embedding': embedding_vector, 'image': cropped_file},
                     partial=True
                 )
             else:
-                image_file.seek(0)
                 serializer = UserFaceSerializer(
                     data={
                         'custom_user': user.id,
                         'embedding': embedding_vector,
-                        'image': image_file,
+                        'image': cropped_file,
                     }
                 )
 
@@ -155,11 +155,30 @@ class UserFaceViewSet(viewsets.ViewSet):
                     "status": status.HTTP_404_NOT_FOUND,
                     "message": "User has no enrolled face yet"
                 }, status=status.HTTP_404_NOT_FOUND)
-
+            
+            cropped_content = crop_center_square(image_file)
+            cropped_file = SimpleUploadedFile(
+                name=image_file.name,
+                content=cropped_content,
+                content_type=image_file.content_type
+            )
             temp_path = os.path.join(settings.MEDIA_ROOT, f"{user.id}_verify.jpg")
             with open(temp_path, "wb+") as f:
-                for chunk in image_file.chunks():
-                    f.write(chunk)
+                f.write(cropped_content)
+
+            try:
+                embedding_objs = DeepFace.represent(
+                    img_path=temp_path,
+                    model_name='Facenet',
+                    enforce_detection=True 
+                )
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                return Response({
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "No face detected in the camera"
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             new_embedding_obj = DeepFace.represent(
                 img_path=temp_path,
@@ -212,10 +231,29 @@ class UserFaceViewSet(viewsets.ViewSet):
                     "message": "Image file is required"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            cropped_content = crop_center_square(image_file)
+            cropped_file = SimpleUploadedFile(
+                name=image_file.name,
+                content=cropped_content,
+                content_type=image_file.content_type
+            )
             temp_path = os.path.join(settings.MEDIA_ROOT, "temp_verify.jpg")
             with open(temp_path, "wb+") as f:
-                for chunk in image_file.chunks():
-                    f.write(chunk)
+                f.write(cropped_content)
+
+            try:
+                embedding_objs = DeepFace.represent(
+                    img_path=temp_path,
+                    model_name='Facenet',
+                    enforce_detection=True 
+                )
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                return Response({
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "No face detected in the camera"
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             new_embedding_obj = DeepFace.represent(
                 img_path=temp_path,
@@ -292,25 +330,7 @@ class UserFaceViewSet(viewsets.ViewSet):
                     "message": "User has no enrolled face. Please enroll first."
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            img = Image.open(image_file)
-            width, height = img.size
-
-            if width > height:
-                img = img.rotate(-90, expand=True)
-                width, height = img.size
-
-            width, height = img.size
-            min_dim = min(width, height)
-            left = (width - min_dim) // 2
-            top = (height - min_dim) // 2
-            right = left + min_dim
-            bottom = top + min_dim
-            img_cropped = img.crop((left, top, right, bottom))
-            cropped_io = BytesIO()
-            img_cropped.save(cropped_io, format=img.format or 'JPEG')
-            cropped_io.seek(0)
-
-            cropped_content = cropped_io.getvalue()
+            cropped_content = crop_center_square(image_file)
 
             temp_path = os.path.join(settings.MEDIA_ROOT, f"{user.id}_update.jpg")
             with open(temp_path, "wb") as f:

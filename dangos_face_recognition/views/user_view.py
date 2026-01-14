@@ -3,6 +3,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import get_user_model
 from rest_framework.response import Response
 from rest_framework import status, viewsets
+from rest_framework.decorators import  action
 from ..serializers import UserSerializer, UserFaceSerializer
 from ..models import UserToken, RefreshToken
 from ..middlewares.permissions import IsSuperUser
@@ -16,7 +17,7 @@ class UserViewSet(viewsets.ViewSet):
             permission_classes = [AllowAny]
         elif self.action in ["delete_users"]:
             permission_classes = [IsSuperUser]
-        elif self.action in ["list", "retrieve", "update"]:
+        elif self.action in ["list", "retrieve", "update", "list_jobs"]:
             permission_classes = [IsAuthenticated]
 
         return [permission() for permission in permission_classes]
@@ -85,17 +86,26 @@ class UserViewSet(viewsets.ViewSet):
             page = int(request.GET.get('page'))
             page_size = int(request.GET.get('page_size'))
             query_param = request.GET.get("query", "").strip()
+            is_excluded = request.GET.get("is_excluded", "").strip()
+            job_param = request.GET.get("job", "").strip()
 
             User = get_user_model()
-            users = User.objects.all()
+            if is_excluded.lower() == "true":
+                users = User.objects.exclude(id=request.user.id)
+            else:
+                users = User.objects.all()
             
             if query_param:
-                users = users.filter(email__icontains=query_param) | users.filter(first_name__icontains=query_param)
+                users = users.filter(email__icontains=query_param) | users.filter(first_name__icontains=query_param) | users.filter(last_name__icontains=query_param) | users.filter(username__icontains=query_param)
+            
+            if job_param:
+                users = users.filter(job__iexact=job_param)
             
             users = users.order_by('-date_joined')
             start = (page - 1) * page_size
             end = start + page_size
             users_page = users[start:end]
+            total_data = users.count()
 
             data = []
             for user in users_page:
@@ -111,6 +121,7 @@ class UserViewSet(viewsets.ViewSet):
                     user_face_data = {}
 
                 data.append({
+                    "id": user.id,
                     "user": user_data,
                     "user_face": user_face_data
                 })
@@ -119,6 +130,7 @@ class UserViewSet(viewsets.ViewSet):
                 "status": status.HTTP_200_OK,
                 "message": "Users fetched successfully.",
                 "total_item": len(data),
+                "total_data": total_data,
                 "page": page,
                 "page_size": page_size,
                 "total_page": (users.count() + page_size - 1) // page_size,
@@ -208,3 +220,20 @@ class UserViewSet(viewsets.ViewSet):
                 "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=["get"], url_path="fetch-jobs")
+    def list_jobs(self, request):
+        User = get_user_model()
+        jobs = User.objects.exclude(job__isnull=True).exclude(job__exact="").values_list('job', flat=True).order_by('job')
+        unique_jobs = {}
+        for job in jobs:
+            if job:
+                key = job.strip().lower()
+                if key not in unique_jobs:
+                    unique_jobs[key] = job.strip()
+
+        return Response({
+            "status": status.HTTP_200_OK,
+            "message": "Job list fetched successfully.",
+            "data": list(unique_jobs.values())
+        }, status=status.HTTP_200_OK)
